@@ -8,14 +8,25 @@
 
 #include "ssl.h"
 
-SSL_CTX *ssl_init() {
+SSL_CTX *ssl_init(config *cfg) {
     SSL_CTX *ctx = NULL;
 
     SSL_load_error_strings();
     SSL_library_init();
     OpenSSL_add_all_algorithms();
 
-    if ((ctx = SSL_CTX_new(SSLv23_client_method()))) {
+#ifdef HAVE_NTLS
+    if (cfg->ntls)
+        ctx = SSL_CTX_new(NTLS_client_method());
+    else
+#endif
+    ctx = SSL_CTX_new(SSLv23_client_method());
+
+    if (ctx != NULL) {
+#ifdef HAVE_NTLS
+        if (cfg->ntls)
+            SSL_CTX_enable_ntls(ctx);
+#endif
         SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, NULL);
         SSL_CTX_set_verify_depth(ctx, 0);
         SSL_CTX_set_mode(ctx, SSL_MODE_AUTO_RETRY);
