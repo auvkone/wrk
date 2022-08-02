@@ -38,7 +38,7 @@ static void usage() {
            "    -n, --ntls             Use NTLS (TLCP) instead of TLS\n"
 #endif
            "    -t, --threads     <N>  Number of threads to use   \n"
-           "                                                      \n"
+           "    -i, --increase    <N>  Increase threads every step \n"
            "    -s, --script      <S>  Load Lua script file       \n"
            "    -H, --header      <H>  Add header to request      \n"
            "        --latency          Print latency statistics   \n"
