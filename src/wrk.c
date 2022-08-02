@@ -125,8 +125,6 @@ int main(int argc, char **argv) {
             }
         }
 
-        threadno += cfg.increase;
-
         struct sigaction sa = {
             .sa_handler = handler,
             .sa_flags   = 0,
@@ -146,7 +144,7 @@ int main(int argc, char **argv) {
         sleep(cfg.duration);
         stop = 1;
 
-        for (uint64_t i = 0; i < cfg.threads; i++) {
+        for (i = threadno; i < cfg.increase; i++) {
             thread *t = &threads[i];
             pthread_join(t->thread, NULL);
 
@@ -195,6 +193,8 @@ int main(int argc, char **argv) {
             script_errors(L, &errors);
             script_done(L, statistics.latency, statistics.requests);
         }
+
+        threadno += cfg.increase;
 
         if (threadno >= cfg.threads)
             break;
