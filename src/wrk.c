@@ -52,14 +52,19 @@ static void usage() {
 int main(int argc, char **argv) {
     char *url, **headers = zmalloc(argc * sizeof(char *));
     struct http_parser_url parts = {};
+    uint64_t start;
+    uint64_t complete;
+    uint64_t bytes;
+    errors errors;
     uint64_t i;
-    uint64_t threadno;
+    uint64_t threadno = 0;
 
     if (parse_args(&cfg, &url, &parts, headers, argc, argv)) {
         usage();
         exit(1);
     }
 
+    char *time    = format_time_s(cfg.duration);
     char *schema  = copy_url_part(url, &parts, UF_SCHEMA);
     char *host    = copy_url_part(url, &parts, UF_HOST);
     char *port    = copy_url_part(url, &parts, UF_PORT);
@@ -81,8 +86,7 @@ int main(int argc, char **argv) {
     signal(SIGPIPE, SIG_IGN);
     signal(SIGINT,  SIG_IGN);
 
-    statistics.latency  = stats_alloc(cfg.timeout * 1000);
-    statistics.requests = stats_alloc(MAX_THREAD_RATE_S);
+
     thread *threads     = zcalloc(cfg.threads * sizeof(thread));
 
     lua_State *L = script_create(cfg.script, url, headers);
@@ -97,8 +101,17 @@ int main(int argc, char **argv) {
     if (cfg.increase == 0)
         cfg.increase = cfg.threads;
 
-    threadno = 0;
     while (1) {
+        start = time_us();
+        complete = 0;
+        bytes = 0;
+        memset(&errors, 0, sizeof(errors));
+
+        stats_free(statistics.latency);
+        stats_free(statistics.requests);
+        statistics.latency  = stats_alloc(cfg.timeout * 1000);
+        statistics.requests = stats_alloc(MAX_THREAD_RATE_S);
+
         for (i = 0; i < cfg.increase; i++) {
             thread *t      = &threads[threadno + i];
             t->loop        = aeCreateEventLoop(10 + cfg.connections * 3);
@@ -132,16 +145,10 @@ int main(int argc, char **argv) {
         sigfillset(&sa.sa_mask);
         sigaction(SIGINT, &sa, NULL);
 
-        char *time = format_time_s(cfg.duration);
         printf("Running %s test @ %s\n", time, url);
         printf("  %"PRIu64" threads and %"PRIu64" connections\n",
             threadno + cfg.increase,
             (cfg.connections / cfg.threads) * (threadno + cfg.increase));
-
-        uint64_t start    = time_us();
-        uint64_t complete = 0;
-        uint64_t bytes    = 0;
-        errors errors     = { 0 };
 
         sleep(cfg.duration);
 
@@ -156,13 +163,16 @@ int main(int argc, char **argv) {
                 pthread_join(t->thread, NULL);
 
             complete += t->complete;
+            t->complete = 0;
             bytes    += t->bytes;
+            t->bytes = 0;
 
             errors.connect += t->errors.connect;
             errors.read    += t->errors.read;
             errors.write   += t->errors.write;
             errors.timeout += t->errors.timeout;
             errors.status  += t->errors.status;
+            memset(&t->errors, 0, sizeof(t->errors));
         }
 
         uint64_t runtime_us = time_us() - start;
