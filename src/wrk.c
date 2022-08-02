@@ -99,8 +99,8 @@ int main(int argc, char **argv) {
 
     threadno = 0;
     while (1) {
-        for (i = threadno; i < cfg.increase; i++) {
-            thread *t      = &threads[i];
+        for (i = 0; i < cfg.increase; i++) {
+            thread *t      = &threads[threadno + i];
             t->loop        = aeCreateEventLoop(10 + cfg.connections * 3);
             t->connections = cfg.connections / cfg.threads;
 
