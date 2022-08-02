@@ -497,11 +497,14 @@ static int parse_args(struct config *cfg, char **url, struct http_parser_url *pa
     cfg->connections = 10;
     cfg->duration    = 10;
     cfg->timeout     = SOCKET_TIMEOUT_MS;
+
+    while ((c = getopt_long(argc, argv, "t:c:d:s:i:H:T:Lrv"
 #ifdef HAVE_NTLS
-    while ((c = getopt_long(argc, argv, "t:c:d:s:H:T:Lrvn?", longopts, NULL)) != -1) {
-#else
-    while ((c = getopt_long(argc, argv, "t:c:d:s:i:H:T:Lrv?", longopts, NULL)) != -1) {
+                                        "n"
 #endif
+
+                                        "?", longopts, NULL)) != -1) {
+
 
         switch (c) {
             case 't':
