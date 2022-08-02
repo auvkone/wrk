@@ -134,7 +134,9 @@ int main(int argc, char **argv) {
 
         char *time = format_time_s(cfg.duration);
         printf("Running %s test @ %s\n", time, url);
-        printf("  %"PRIu64" threads and %"PRIu64" connections\n", cfg.threads, cfg.connections);
+        printf("  %"PRIu64" threads and %"PRIu64" connections\n",
+            threadno + cfg.increase,
+            (cfg.connections / cfg.threads) * (threadno + cfg.increase));
 
         uint64_t start    = time_us();
         uint64_t complete = 0;
@@ -142,11 +144,16 @@ int main(int argc, char **argv) {
         errors errors     = { 0 };
 
         sleep(cfg.duration);
-        stop = 1;
 
-        for (i = threadno; i < cfg.increase; i++) {
+        threadno += cfg.increase;
+
+        if (threadno >= cfg.threads)
+            stop = 1;
+
+        for (i = 0; i < threadno; i++) {
             thread *t = &threads[i];
-            pthread_join(t->thread, NULL);
+            if (stop)
+                pthread_join(t->thread, NULL);
 
             complete += t->complete;
             bytes    += t->bytes;
@@ -163,8 +170,9 @@ int main(int argc, char **argv) {
         long double req_per_s   = complete   / runtime_s;
         long double bytes_per_s = bytes      / runtime_s;
 
-        if (complete / cfg.connections > 0) {
-            int64_t interval = runtime_us / (complete / cfg.connections);
+        if (complete / (cfg.connections / cfg.threads * threadno)) > 0) {
+            int64_t interval = runtime_us /
+                        (complete / (cfg.connections / cfg.threads * threadno));
             stats_correct(statistics.latency, interval);
         }
 
@@ -194,9 +202,7 @@ int main(int argc, char **argv) {
             script_done(L, statistics.latency, statistics.requests);
         }
 
-        threadno += cfg.increase;
-
-        if (threadno >= cfg.threads)
+        if (stop)
             break;
     }
 
