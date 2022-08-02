@@ -52,6 +52,8 @@ static void usage() {
 int main(int argc, char **argv) {
     char *url, **headers = zmalloc(argc * sizeof(char *));
     struct http_parser_url parts = {};
+    uint64_t i;
+    uint64_t threadno;
 
     if (parse_args(&cfg, &url, &parts, headers, argc, argv)) {
         usage();
@@ -92,99 +94,110 @@ int main(int argc, char **argv) {
 
     cfg.host = host;
 
-    for (uint64_t i = 0; i < cfg.threads; i++) {
-        thread *t      = &threads[i];
-        t->loop        = aeCreateEventLoop(10 + cfg.connections * 3);
-        t->connections = cfg.connections / cfg.threads;
+    if (cfg.increase == 0)
+        cfg.increase = cfg.threads;
 
-        t->L = script_create(cfg.script, url, headers);
-        script_init(L, t, argc - optind, &argv[optind]);
+    threadno = 0;
+    while (1) {
+        for (i = threadno; i < cfg.increase; i++) {
+            thread *t      = &threads[i];
+            t->loop        = aeCreateEventLoop(10 + cfg.connections * 3);
+            t->connections = cfg.connections / cfg.threads;
 
-        if (i == 0) {
-            cfg.pipeline = script_verify_request(t->L);
-            cfg.dynamic  = !script_is_static(t->L);
-            cfg.delay    = script_has_delay(t->L);
-            if (script_want_response(t->L)) {
-                parser_settings.on_header_field = header_field;
-                parser_settings.on_header_value = header_value;
-                parser_settings.on_body         = response_body;
+            t->L = script_create(cfg.script, url, headers);
+            script_init(L, t, argc - optind, &argv[optind]);
+
+            if (i == 0) {
+                cfg.pipeline = script_verify_request(t->L);
+                cfg.dynamic  = !script_is_static(t->L);
+                cfg.delay    = script_has_delay(t->L);
+                if (script_want_response(t->L)) {
+                    parser_settings.on_header_field = header_field;
+                    parser_settings.on_header_value = header_value;
+                    parser_settings.on_body         = response_body;
+                }
+            }
+
+            if (!t->loop || pthread_create(&t->thread, NULL, &thread_main, t)) {
+                char *msg = strerror(errno);
+                fprintf(stderr, "unable to create thread %"PRIu64": %s\n", i, msg);
+                exit(2);
             }
         }
 
-        if (!t->loop || pthread_create(&t->thread, NULL, &thread_main, t)) {
-            char *msg = strerror(errno);
-            fprintf(stderr, "unable to create thread %"PRIu64": %s\n", i, msg);
-            exit(2);
+        threadno += cfg.increase;
+
+        struct sigaction sa = {
+            .sa_handler = handler,
+            .sa_flags   = 0,
+        };
+        sigfillset(&sa.sa_mask);
+        sigaction(SIGINT, &sa, NULL);
+
+        char *time = format_time_s(cfg.duration);
+        printf("Running %s test @ %s\n", time, url);
+        printf("  %"PRIu64" threads and %"PRIu64" connections\n", cfg.threads, cfg.connections);
+
+        uint64_t start    = time_us();
+        uint64_t complete = 0;
+        uint64_t bytes    = 0;
+        errors errors     = { 0 };
+
+        sleep(cfg.duration);
+        stop = 1;
+
+        for (uint64_t i = 0; i < cfg.threads; i++) {
+            thread *t = &threads[i];
+            pthread_join(t->thread, NULL);
+
+            complete += t->complete;
+            bytes    += t->bytes;
+
+            errors.connect += t->errors.connect;
+            errors.read    += t->errors.read;
+            errors.write   += t->errors.write;
+            errors.timeout += t->errors.timeout;
+            errors.status  += t->errors.status;
         }
-    }
 
-    struct sigaction sa = {
-        .sa_handler = handler,
-        .sa_flags   = 0,
-    };
-    sigfillset(&sa.sa_mask);
-    sigaction(SIGINT, &sa, NULL);
+        uint64_t runtime_us = time_us() - start;
+        long double runtime_s   = runtime_us / 1000000.0;
+        long double req_per_s   = complete   / runtime_s;
+        long double bytes_per_s = bytes      / runtime_s;
 
-    char *time = format_time_s(cfg.duration);
-    printf("Running %s test @ %s\n", time, url);
-    printf("  %"PRIu64" threads and %"PRIu64" connections\n", cfg.threads, cfg.connections);
+        if (complete / cfg.connections > 0) {
+            int64_t interval = runtime_us / (complete / cfg.connections);
+            stats_correct(statistics.latency, interval);
+        }
 
-    uint64_t start    = time_us();
-    uint64_t complete = 0;
-    uint64_t bytes    = 0;
-    errors errors     = { 0 };
+        print_stats_header();
+        print_stats("Latency", statistics.latency, format_time_us);
+        print_stats("Req/Sec", statistics.requests, format_metric);
+        if (cfg.latency) print_stats_latency(statistics.latency);
 
-    sleep(cfg.duration);
-    stop = 1;
+        char *runtime_msg = format_time_us(runtime_us);
 
-    for (uint64_t i = 0; i < cfg.threads; i++) {
-        thread *t = &threads[i];
-        pthread_join(t->thread, NULL);
+        printf("  %"PRIu64" requests in %s, %sB read\n", complete, runtime_msg, format_binary(bytes));
+        if (errors.connect || errors.read || errors.write || errors.timeout) {
+            printf("  Socket errors: connect %d, read %d, write %d, timeout %d\n",
+                   errors.connect, errors.read, errors.write, errors.timeout);
+        }
 
-        complete += t->complete;
-        bytes    += t->bytes;
+        if (errors.status) {
+            printf("  Non-2xx or 3xx responses: %d\n", errors.status);
+        }
 
-        errors.connect += t->errors.connect;
-        errors.read    += t->errors.read;
-        errors.write   += t->errors.write;
-        errors.timeout += t->errors.timeout;
-        errors.status  += t->errors.status;
-    }
+        printf("Requests/sec: %9.2Lf\n", req_per_s);
+        printf("Transfer/sec: %10sB\n", format_binary(bytes_per_s));
 
-    uint64_t runtime_us = time_us() - start;
-    long double runtime_s   = runtime_us / 1000000.0;
-    long double req_per_s   = complete   / runtime_s;
-    long double bytes_per_s = bytes      / runtime_s;
+        if (script_has_done(L)) {
+            script_summary(L, runtime_us, complete, bytes);
+            script_errors(L, &errors);
+            script_done(L, statistics.latency, statistics.requests);
+        }
 
-    if (complete / cfg.connections > 0) {
-        int64_t interval = runtime_us / (complete / cfg.connections);
-        stats_correct(statistics.latency, interval);
-    }
-
-    print_stats_header();
-    print_stats("Latency", statistics.latency, format_time_us);
-    print_stats("Req/Sec", statistics.requests, format_metric);
-    if (cfg.latency) print_stats_latency(statistics.latency);
-
-    char *runtime_msg = format_time_us(runtime_us);
-
-    printf("  %"PRIu64" requests in %s, %sB read\n", complete, runtime_msg, format_binary(bytes));
-    if (errors.connect || errors.read || errors.write || errors.timeout) {
-        printf("  Socket errors: connect %d, read %d, write %d, timeout %d\n",
-               errors.connect, errors.read, errors.write, errors.timeout);
-    }
-
-    if (errors.status) {
-        printf("  Non-2xx or 3xx responses: %d\n", errors.status);
-    }
-
-    printf("Requests/sec: %9.2Lf\n", req_per_s);
-    printf("Transfer/sec: %10sB\n", format_binary(bytes_per_s));
-
-    if (script_has_done(L)) {
-        script_summary(L, runtime_us, complete, bytes);
-        script_errors(L, &errors);
-        script_done(L, statistics.latency, statistics.requests);
+        if (threadno >= cfg.threads)
+            break;
     }
 
     return 0;
@@ -471,6 +484,7 @@ static struct option longopts[] = {
 #ifdef HAVE_NTLS
     { "ntls",        no_argument,       NULL, 'n' },
 #endif
+    { "increase",    required_argument, NULL, 'i' },
     { NULL,          0,                 NULL,  0  }
 };
 
@@ -486,12 +500,15 @@ static int parse_args(struct config *cfg, char **url, struct http_parser_url *pa
 #ifdef HAVE_NTLS
     while ((c = getopt_long(argc, argv, "t:c:d:s:H:T:Lrvn?", longopts, NULL)) != -1) {
 #else
-    while ((c = getopt_long(argc, argv, "t:c:d:s:H:T:Lrv?", longopts, NULL)) != -1) {
+    while ((c = getopt_long(argc, argv, "t:c:d:s:i:H:T:Lrv?", longopts, NULL)) != -1) {
 #endif
 
         switch (c) {
             case 't':
                 if (scan_metric(optarg, &cfg->threads)) return -1;
+                break;
+            case 'i':
+                if (scan_metric(optarg, &cfg->increase)) return -1;
                 break;
             case 'c':
                 if (scan_metric(optarg, &cfg->connections)) return -1;
