@@ -107,10 +107,8 @@ int main(int argc, char **argv) {
         bytes = 0;
         memset(&errors, 0, sizeof(errors));
 
-        stats_free(statistics.latency);
-        stats_free(statistics.requests);
-        statistics.latency  = stats_alloc(cfg.timeout * 1000);
-        statistics.requests = stats_alloc(MAX_THREAD_RATE_S);
+        stats_reset(statistics.latency);
+        stats_reset(statistics.requests);
 
         for (i = 0; i < cfg.increase; i++) {
             thread *t      = &threads[threadno + i];
