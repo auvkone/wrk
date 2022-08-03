@@ -7,14 +7,15 @@
 
 #include "stats.h"
 #include "zmalloc.h"
+#include "atomicvar.h"
 
 void stats_reset(stats *stats) {
-    uint64_t limit = stats->limit;
+    __sync_val_compare_and_swap(&stats->count, stats->count, 0);
+    __sync_val_compare_and_swap(&stats->min, stats->min, UINT64_MAX);
+    __sync_val_compare_and_swap(&stats->max, stats->max, 0);
 
-    /* TODO: atomicSet */
-    memset(stats, 0, sizeof(stats) + sizeof(uint64_t) * limit);
-    stats->limit = limit;
-    stats->min = UINT64_MAX;
+    for (uint64_t i = 0; i < stats->limit; i++)
+        __sync_val_compare_and_swap(&stats->data[i], stats->data[i], 0);
 }
 
 stats *stats_alloc(uint64_t max) {
