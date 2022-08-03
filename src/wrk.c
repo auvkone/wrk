@@ -86,7 +86,8 @@ int main(int argc, char **argv) {
     signal(SIGPIPE, SIG_IGN);
     signal(SIGINT,  SIG_IGN);
 
-
+    statistics.latency  = stats_alloc(cfg.timeout * 1000);
+    statistics.requests = stats_alloc(MAX_THREAD_RATE_S);
     thread *threads     = zcalloc(cfg.threads * sizeof(thread));
 
     lua_State *L = script_create(cfg.script, url, headers);
@@ -106,9 +107,6 @@ int main(int argc, char **argv) {
         complete = 0;
         bytes = 0;
         memset(&errors, 0, sizeof(errors));
-
-        stats_reset(statistics.latency);
-        stats_reset(statistics.requests);
 
         for (i = 0; i < cfg.increase; i++) {
             thread *t      = &threads[threadno + i];
@@ -209,6 +207,9 @@ int main(int argc, char **argv) {
             script_errors(L, &errors);
             script_done(L, statistics.latency, statistics.requests);
         }
+
+        stats_reset(statistics.latency);
+        stats_reset(statistics.requests);
 
         if (stop)
             break;
