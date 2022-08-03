@@ -159,16 +159,20 @@ int main(int argc, char **argv) {
                 pthread_join(t->thread, NULL);
 
             complete += t->complete;
-            t->complete = 0;
+            __sync_val_compare_and_swap(&t->complete, t->complete, 0);
             bytes    += t->bytes;
-            t->bytes = 0;
+            __sync_val_compare_and_swap(&t->bytes, t->bytes, 0);
 
             errors.connect += t->errors.connect;
             errors.read    += t->errors.read;
             errors.write   += t->errors.write;
             errors.timeout += t->errors.timeout;
             errors.status  += t->errors.status;
-            memset(&t->errors, 0, sizeof(t->errors));
+            __sync_val_compare_and_swap(&t->errors.connect, t->errors.connect, 0);
+            __sync_val_compare_and_swap(&t->errors.read, t->errors.read, 0);
+            __sync_val_compare_and_swap(&t->errors.write, t->errors.write, 0);
+            __sync_val_compare_and_swap(&t->errors.timeout, t->errors.timeout, 0);
+            __sync_val_compare_and_swap(&t->errors.status, t->errors.status, 0);
         }
 
         uint64_t runtime_us = time_us() - start;
