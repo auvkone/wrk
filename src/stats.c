@@ -2,10 +2,20 @@
 
 #include <inttypes.h>
 #include <stdlib.h>
+#include <string.h>
 #include <math.h>
 
 #include "stats.h"
 #include "zmalloc.h"
+
+void stats_reset(stats *stats) {
+    uint64_t limit = stats->limit;
+
+    /* TODO: atomicSet */
+    memset(stats, 0, sizeof(stats) + sizeof(uint64_t) * limit);
+    stats->limit = limit;
+    stats->min = UINT64_MAX;
+}
 
 stats *stats_alloc(uint64_t max) {
     uint64_t limit = max + 1;

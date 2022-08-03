@@ -23,6 +23,7 @@ typedef struct {
     uint64_t data[];
 } stats;
 
+void stats_reset(stats *stats);
 stats *stats_alloc(uint64_t);
 void stats_free(stats *);
 
