@@ -86,10 +86,6 @@ int main(int argc, char **argv) {
     signal(SIGPIPE, SIG_IGN);
     signal(SIGINT,  SIG_IGN);
 
-    statistics.latency  = stats_alloc(cfg.timeout * 1000);
-    statistics.requests = stats_alloc(MAX_THREAD_RATE_S);
-    thread *threads     = zcalloc(cfg.threads * sizeof(thread));
-
     lua_State *L = script_create(cfg.script, url, headers);
     if (!script_resolve(L, host, service)) {
         char *msg = strerror(errno);
@@ -103,13 +99,22 @@ int main(int argc, char **argv) {
         cfg.increase = cfg.threads;
 
     while (1) {
+        threadno += cfg.increase;
+
+        if (threadno > cfg.threads)
+            break;
+
+        statistics.latency  = stats_alloc(cfg.timeout * 1000);
+        statistics.requests = stats_alloc(MAX_THREAD_RATE_S);
+        thread *threads     = zcalloc(threadno * sizeof(thread));
+
         start = time_us();
         complete = 0;
         bytes = 0;
         memset(&errors, 0, sizeof(errors));
 
-        for (i = 0; i < cfg.increase; i++) {
-            thread *t      = &threads[threadno + i];
+        for (i = 0; i < threadno; i++) {
+            thread *t      = &threads[i];
             t->loop        = aeCreateEventLoop(10 + cfg.connections * 3);
             t->connections = cfg.connections / cfg.threads;
 
@@ -143,36 +148,24 @@ int main(int argc, char **argv) {
 
         printf("Running %s test @ %s\n", time, url);
         printf("  %"PRIu64" threads and %"PRIu64" connections\n",
-            threadno + cfg.increase,
-            (cfg.connections / cfg.threads) * (threadno + cfg.increase));
+            threadno,
+            (cfg.connections / cfg.threads) * threadno);
 
         sleep(cfg.duration);
-
-        threadno += cfg.increase;
-
-        if (threadno >= cfg.threads)
-            stop = 1;
+        stop = 1;
 
         for (i = 0; i < threadno; i++) {
             thread *t = &threads[i];
-            if (stop)
-                pthread_join(t->thread, NULL);
+            pthread_join(t->thread, NULL);
 
             complete += t->complete;
-            __sync_val_compare_and_swap(&t->complete, t->complete, 0);
             bytes    += t->bytes;
-            __sync_val_compare_and_swap(&t->bytes, t->bytes, 0);
 
             errors.connect += t->errors.connect;
             errors.read    += t->errors.read;
             errors.write   += t->errors.write;
             errors.timeout += t->errors.timeout;
             errors.status  += t->errors.status;
-            __sync_val_compare_and_swap(&t->errors.connect, t->errors.connect, 0);
-            __sync_val_compare_and_swap(&t->errors.read, t->errors.read, 0);
-            __sync_val_compare_and_swap(&t->errors.write, t->errors.write, 0);
-            __sync_val_compare_and_swap(&t->errors.timeout, t->errors.timeout, 0);
-            __sync_val_compare_and_swap(&t->errors.status, t->errors.status, 0);
         }
 
         uint64_t runtime_us = time_us() - start;
@@ -212,11 +205,9 @@ int main(int argc, char **argv) {
             script_done(L, statistics.latency, statistics.requests);
         }
 
-        stats_reset(statistics.latency);
-        stats_reset(statistics.requests);
-
-        if (stop)
-            break;
+        stats_free(statistics.latency);
+        stats_free(statistics.requests);
+        zfree(threads);
     }
 
     return 0;
