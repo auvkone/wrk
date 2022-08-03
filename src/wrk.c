@@ -108,6 +108,7 @@ int main(int argc, char **argv) {
         statistics.requests = stats_alloc(MAX_THREAD_RATE_S);
         thread *threads     = zcalloc(threadno * sizeof(thread));
 
+        stop = 0;
         start = time_us();
         complete = 0;
         bytes = 0;
