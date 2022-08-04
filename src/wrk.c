@@ -33,12 +33,13 @@ static void usage() {
     printf("Usage: wrk <options> <url>                            \n"
            "  Options:                                            \n"
            "    -c, --connections <N>  Connections to keep open   \n"
+           "    -I, --conn_incr   <N>  Increase connections every step \n"
            "    -d, --duration    <T>  Duration of test           \n"
 #ifdef HAVE_NTLS
            "    -n, --ntls             Use NTLS (TLCP) instead of TLS\n"
 #endif
            "    -t, --threads     <N>  Number of threads to use   \n"
-           "    -i, --increase    <N>  Increase threads every step \n"
+           "    -i, --threads_incr <N>  Increase threads every step \n"
            "    -s, --script      <S>  Load Lua script file       \n"
            "    -H, --header      <H>  Add header to request      \n"
            "        --latency          Print latency statistics   \n"
@@ -58,6 +59,7 @@ int main(int argc, char **argv) {
     errors errors;
     uint64_t i;
     uint64_t threadno = 0;
+    uint64_t conn = 0;
 
     if (parse_args(&cfg, &url, &parts, headers, argc, argv)) {
         usage();
@@ -95,13 +97,20 @@ int main(int argc, char **argv) {
 
     cfg.host = host;
 
-    if (cfg.increase == 0)
-        cfg.increase = cfg.threads;
+    if (cfg.threads_incr == 0)
+        cfg.threads_incr = cfg.threads;
+
+    if (cfg.connections_incr == 0)
+        cfg.connections_incr = cfg.connections;
 
     while (1) {
-        threadno += cfg.increase;
+        threadno += cfg.threads_incr;
+        conn += cfg.connections_incr;
 
         if (threadno > cfg.threads)
+            break;
+
+        if (conn > cfg.connections)
             break;
 
         statistics.latency  = stats_alloc(cfg.timeout * 1000);
@@ -117,7 +126,7 @@ int main(int argc, char **argv) {
         for (i = 0; i < threadno; i++) {
             thread *t      = &threads[i];
             t->loop        = aeCreateEventLoop(10 + cfg.connections * 3);
-            t->connections = cfg.connections / cfg.threads;
+            t->connections = conn / threadno;
 
             t->L = script_create(cfg.script, url, headers);
             script_init(L, t, argc - optind, &argv[optind]);
@@ -149,8 +158,7 @@ int main(int argc, char **argv) {
 
         printf("Running %s test @ %s\n", time, url);
         printf("  %"PRIu64" threads and %"PRIu64" connections\n",
-            threadno,
-            (cfg.connections / cfg.threads) * threadno);
+               threadno, conn);
 
         sleep(cfg.duration);
         stop = 1;
@@ -174,9 +182,8 @@ int main(int argc, char **argv) {
         long double req_per_s   = complete   / runtime_s;
         long double bytes_per_s = bytes      / runtime_s;
 
-        if (complete / (cfg.connections / cfg.threads * threadno) > 0) {
-            int64_t interval = runtime_us /
-                        (complete / (cfg.connections / cfg.threads * threadno));
+        if (complete / conn > 0) {
+            int64_t interval = runtime_us / (complete / conn);
             stats_correct(statistics.latency, interval);
         }
 
@@ -484,8 +491,10 @@ static char *copy_url_part(char *url, struct http_parser_url *parts, enum http_p
 
 static struct option longopts[] = {
     { "connections", required_argument, NULL, 'c' },
+    { "conn_incr",   required_argument, NULL, 'I' },
     { "duration",    required_argument, NULL, 'd' },
     { "threads",     required_argument, NULL, 't' },
+    { "threads_incr",required_argument, NULL, 'i' },
     { "script",      required_argument, NULL, 's' },
     { "header",      required_argument, NULL, 'H' },
     { "latency",     no_argument,       NULL, 'L' },
@@ -495,7 +504,6 @@ static struct option longopts[] = {
 #ifdef HAVE_NTLS
     { "ntls",        no_argument,       NULL, 'n' },
 #endif
-    { "increase",    required_argument, NULL, 'i' },
     { NULL,          0,                 NULL,  0  }
 };
 
@@ -509,7 +517,7 @@ static int parse_args(struct config *cfg, char **url, struct http_parser_url *pa
     cfg->duration    = 10;
     cfg->timeout     = SOCKET_TIMEOUT_MS;
 
-    while ((c = getopt_long(argc, argv, "t:c:d:s:i:H:T:Lrv"
+    while ((c = getopt_long(argc, argv, "t:c:d:s:i:I:H:T:Lrv"
 #ifdef HAVE_NTLS
                                         "n"
 #endif
@@ -522,7 +530,10 @@ static int parse_args(struct config *cfg, char **url, struct http_parser_url *pa
                 if (scan_metric(optarg, &cfg->threads)) return -1;
                 break;
             case 'i':
-                if (scan_metric(optarg, &cfg->increase)) return -1;
+                if (scan_metric(optarg, &cfg->threads_incr)) return -1;
+                break;
+            case 'I':
+                if (scan_metric(optarg, &cfg->connections_incr)) return -1;
                 break;
             case 'c':
                 if (scan_metric(optarg, &cfg->connections)) return -1;
