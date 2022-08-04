@@ -98,19 +98,20 @@ int main(int argc, char **argv) {
     cfg.host = host;
 
     if (cfg.threads_incr == 0)
-        cfg.threads_incr = cfg.threads;
+        threadno = cfg.threads;
 
     if (cfg.connections_incr == 0)
-        cfg.connections_incr = cfg.connections;
+        conn = cfg.connections;
 
     while (1) {
-        threadno += cfg.threads_incr;
-        conn += cfg.connections_incr;
-
-        if (threadno > cfg.threads)
+        if (cfg.threads_incr > 0)
+            threadno += cfg.threads_incr;
+        else if (cfg.connections_incr > 0)
+            conn += cfg.connections_incr;
+        else
             break;
 
-        if (conn > cfg.connections)
+        if (threadno > cfg.threads || conn > cfg.connections)
             break;
 
         statistics.latency  = stats_alloc(cfg.timeout * 1000);
