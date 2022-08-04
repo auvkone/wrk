@@ -99,9 +99,13 @@ int main(int argc, char **argv) {
 
     if (cfg.threads_incr == 0)
         threadno = cfg.threads;
+    else
+        threadno = cfg.threads_incr;
 
     if (cfg.connections_incr == 0)
         conn = cfg.connections;
+    else
+        conn = cfg.connections_incr;
 
     while (1) {
         if (threadno > cfg.threads || conn > cfg.connections)
