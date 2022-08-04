@@ -165,6 +165,14 @@ int main(int argc, char **argv) {
             thread *t = &threads[i];
             pthread_join(t->thread, NULL);
 
+            connection *c = t->cs;
+
+            for (uint64_t j = 0; j < t->connections; j++, c++) {
+                SSL_free(c->ssl);
+                sock.close(c);
+                close(c->fd);
+            }
+
             complete += t->complete;
             bytes    += t->bytes;
 
