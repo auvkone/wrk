@@ -104,13 +104,6 @@ int main(int argc, char **argv) {
         conn = cfg.connections;
 
     while (1) {
-        if (cfg.threads_incr > 0)
-            threadno += cfg.threads_incr;
-        else if (cfg.connections_incr > 0)
-            conn += cfg.connections_incr;
-        else
-            break;
-
         if (threadno > cfg.threads || conn > cfg.connections)
             break;
 
@@ -217,6 +210,13 @@ int main(int argc, char **argv) {
         stats_free(statistics.latency);
         stats_free(statistics.requests);
         zfree(threads);
+
+        if (cfg.threads_incr > 0)
+            threadno += cfg.threads_incr;
+        else if (cfg.connections_incr > 0)
+            conn += cfg.connections_incr;
+        else
+            break;
     }
 
     return 0;
