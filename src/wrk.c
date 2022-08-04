@@ -258,8 +258,8 @@ void *thread_main(void *arg) {
 
     c = thread->cs;
     for (uint64_t i = 0; i < thread->connections; i++, c++) {
-        SSL_free(c->ssl);
         sock.close(c);
+        SSL_free(c->ssl);
         if (c->fd >= 0)
             close(c->fd);
     }
