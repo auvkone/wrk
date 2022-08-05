@@ -24,9 +24,11 @@ static struct http_parser_settings parser_settings = {
 };
 
 static volatile sig_atomic_t stop = 0;
+static volatile sig_atomic_t terminate = 0;
 
 static void handler(int sig) {
     stop = 1;
+    terminate = 1;
 }
 
 static void usage() {
@@ -220,6 +222,9 @@ int main(int argc, char **argv) {
         else if (cfg.connections_incr > 0)
             conn += cfg.connections_incr;
         else
+            break;
+
+        if (terminate)
             break;
     }
 
