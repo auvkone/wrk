@@ -74,6 +74,7 @@ typedef struct config {
     bool     delay;
     bool     dynamic;
     bool     latency;
+    bool     err;
 #ifdef HAVE_NTLS
     bool     ntls;
 #endif

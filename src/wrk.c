@@ -280,7 +280,10 @@ static int connect_socket(thread *thread, connection *c) {
     fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 
     if (connect(fd, addr->ai_addr, addr->ai_addrlen) == -1) {
-        if (errno != EINPROGRESS) goto error;
+        if (errno != EINPROGRESS) {
+            if (cfg.err) perror("failed to connect");
+            goto error;
+        }
     }
 
     flags = 1;
@@ -515,6 +518,7 @@ static struct option longopts[] = {
     { "timeout",     required_argument, NULL, 'T' },
     { "help",        no_argument,       NULL, 'h' },
     { "version",     no_argument,       NULL, 'v' },
+    { "error",       no_argument,       NULL, 'e' },
 #ifdef HAVE_NTLS
     { "ntls",        no_argument,       NULL, 'n' },
 #endif
@@ -531,7 +535,7 @@ static int parse_args(struct config *cfg, char **url, struct http_parser_url *pa
     cfg->duration    = 10;
     cfg->timeout     = SOCKET_TIMEOUT_MS;
 
-    while ((c = getopt_long(argc, argv, "t:c:d:s:i:I:H:T:Lrv"
+    while ((c = getopt_long(argc, argv, "t:c:d:s:i:I:H:T:Lrve"
 #ifdef HAVE_NTLS
                                         "n"
 #endif
@@ -576,6 +580,9 @@ static int parse_args(struct config *cfg, char **url, struct http_parser_url *pa
             case 'v':
                 printf("wrk %s [%s] ", VERSION, aeGetApiName());
                 printf("Copyright (C) 2012 Will Glozer\n");
+                break;
+            case 'e':
+                cfg->err = true;
                 break;
             case 'h':
             case '?':
