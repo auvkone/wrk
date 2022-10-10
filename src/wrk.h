@@ -74,6 +74,10 @@ typedef struct config {
     bool     latency;
 #ifdef HAVE_NTLS
     bool     ntls;
+    char     *sign_cert;
+    char     *sign_key;
+    char     *enc_cert;
+    char     *enc_key;
 #endif
     char    *host;
     char    *script;

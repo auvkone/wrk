@@ -36,6 +36,10 @@ static void usage() {
            "    -d, --duration    <T>  Duration of test           \n"
 #ifdef HAVE_NTLS
            "    -n, --ntls             Use NTLS (TLCP) instead of TLS\n"
+           "    -S, --sign_cert   <F>  signature certificate\n"
+           "    -K, --sign_key    <F>  signature key   \n"
+           "    -E, --enc_cert    <F>  encryption certificate\n"
+           "    -Y, --enc_key     <F>  encryption key   \n"
 #endif
            "    -t, --threads     <N>  Number of threads to use   \n"
            "                                                      \n"
@@ -470,6 +474,10 @@ static struct option longopts[] = {
     { "version",     no_argument,       NULL, 'v' },
 #ifdef HAVE_NTLS
     { "ntls",        no_argument,       NULL, 'n' },
+    { "sign_cert",   required_argument, NULL, 'S' },
+    { "sign_key",    required_argument, NULL, 'K' },
+    { "enc_cert",    required_argument, NULL, 'E' },
+    { "enc_key",     required_argument, NULL, 'Y' },
 #endif
     { NULL,          0,                 NULL,  0  }
 };
@@ -484,7 +492,7 @@ static int parse_args(struct config *cfg, char **url, struct http_parser_url *pa
     cfg->duration    = 10;
     cfg->timeout     = SOCKET_TIMEOUT_MS;
 #ifdef HAVE_NTLS
-    while ((c = getopt_long(argc, argv, "t:c:d:s:H:T:Lrvn?", longopts, NULL)) != -1) {
+    while ((c = getopt_long(argc, argv, "t:c:d:s:H:T:S:K:E:Y:Lrvn?", longopts, NULL)) != -1) {
 #else
     while ((c = getopt_long(argc, argv, "t:c:d:s:H:T:Lrv?", longopts, NULL)) != -1) {
 #endif
@@ -502,6 +510,18 @@ static int parse_args(struct config *cfg, char **url, struct http_parser_url *pa
 #ifdef HAVE_NTLS
             case 'n':
                 cfg->ntls = true;
+                break;
+            case 'S':
+                cfg->sign_cert = optarg;
+                break;
+            case 'K':
+                cfg->sign_key = optarg;
+                break;
+            case 'E':
+                cfg->enc_cert = optarg;
+                break;
+            case 'Y':
+                cfg->enc_key = optarg;
                 break;
 #endif
             case 's':

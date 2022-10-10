@@ -26,6 +26,14 @@ SSL_CTX *ssl_init(config *cfg) {
 #ifdef HAVE_NTLS
         if (cfg->ntls)
             SSL_CTX_enable_ntls(ctx);
+        if (cfg->sign_cert)
+            SSL_CTX_use_sign_certificate_file(ctx, cfg->sign_cert, SSL_FILETYPE_PEM);
+        if (cfg->sign_key)
+            SSL_CTX_use_sign_PrivateKey_file(ctx, cfg->sign_key, SSL_FILETYPE_PEM);
+        if (cfg->enc_cert)
+            SSL_CTX_use_enc_certificate_file(ctx, cfg->enc_cert, SSL_FILETYPE_PEM);
+        if (cfg->enc_key)
+            SSL_CTX_use_enc_PrivateKey_file(ctx, cfg->enc_key, SSL_FILETYPE_PEM);
 #endif
         SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, NULL);
         SSL_CTX_set_verify_depth(ctx, 0);
